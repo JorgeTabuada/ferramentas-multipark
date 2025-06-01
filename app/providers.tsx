@@ -5,6 +5,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
+import { AuthProvider } from "@/hooks/useAuth";
 import { useState } from "react";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -19,9 +20,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
         disableTransitionOnChange
       >
         <TooltipProvider>
-          {children}
-          <Toaster />
-          <Sonner />
+          <AuthProvider>
+            {children}
+            <Toaster />
+            <Sonner />
+          </AuthProvider>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
