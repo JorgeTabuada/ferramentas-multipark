@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
 
 export interface ReservadoExcel {
   license_plate: string;
@@ -38,14 +38,32 @@ export interface EntregaExcel {
 
 export class ExcelParser {
   static async parseFile(file: File, type: 'reservados' | 'caixa' | 'entregas'): Promise<any[]> {
-    const buffer = await file.arrayBuffer();
-    const workbook = XLSX.read(buffer);
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+    const text = await file.text();
+    
+    let jsonData: any[];
+    
+    // Detectar se é CSV ou tentar como CSV
+    if (file.name.toLowerCase().endsWith('.csv') || file.type === 'text/csv') {
+      // Parse CSV com PapaParse
+      const result = Papa.parse(text, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: true,
+        encoding: 'UTF-8'
+      });
+      
+      if (result.errors.length > 0) {
+        console.warn('⚠️ Erros no parsing CSV:', result.errors);
+      }
+      
+      jsonData = result.data;
+    } else {
+      // Para Excel, converter para CSV primeiro (método mais seguro)
+      throw new Error('Por favor, exporte o ficheiro Excel como CSV (.csv) antes de carregar.');
+    }
     
     console.log(`🔍 Parsing ${type}:`, {
       fileName: file.name,
-      sheetName: workbook.SheetNames[0],
       rows: jsonData.length,
       sample: jsonData[0]
     });
