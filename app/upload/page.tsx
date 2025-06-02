@@ -1,1 +1,265 @@
-'use client';\n\nimport React, { useState } from 'react';\nimport { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';\nimport { Button } from '@/components/ui/button';\nimport { Upload, FileText, CheckCircle, XCircle, ArrowLeft, AlertTriangle } from 'lucide-react';\nimport { toast } from 'sonner';\nimport Link from 'next/link';\n\ntype UploadType = 'reservados' | 'caixa' | 'entregas';\n\ninterface UploadResult {\n  success: boolean;\n  message: string;\n  data?: {\n    parsed: number;\n    inserted?: number;\n    updated?: number;\n    notFound?: number;\n    errors: string[];\n  };\n  validation?: {\n    valid: boolean;\n    errors: string[];\n    warnings: string[];\n  };\n  error?: string;\n  details?: string;\n}\n\nexport default function UploadPage() {\n  const [selectedType, setSelectedType] = useState<UploadType>('reservados');\n  const [file, setFile] = useState<File | null>(null);\n  const [uploading, setUploading] = useState(false);\n  const [result, setResult] = useState<UploadResult | null>(null);\n  const [dragOver, setDragOver] = useState(false);\n\n  const uploadTypes = [\n    {\n      id: 'reservados' as UploadType,\n      title: 'Upload Reservados',\n      description: 'Ficheiros CSV com dados de reservas (base principal)',\n      color: 'bg-blue-100 text-blue-700 border-blue-200'\n    },\n    {\n      id: 'caixa' as UploadType,\n      title: 'Upload Caixa',\n      description: 'Ficheiros CSV com dados de caixa (atualiza reservas)',\n      color: 'bg-green-100 text-green-700 border-green-200'\n    },\n    {\n      id: 'entregas' as UploadType,\n      title: 'Upload Entregas',\n      description: 'Ficheiros CSV com dados de entregas (finaliza reservas)',\n      color: 'bg-purple-100 text-purple-700 border-purple-200'\n    }\n  ];\n\n  const handleFileSelect = (selectedFile: File) => {\n    if (!selectedFile) return;\n    \n    const validTypes = ['.csv'];\n    const fileExtension = selectedFile.name.toLowerCase().substring(selectedFile.name.lastIndexOf('.'));\n    \n    if (!validTypes.includes(fileExtension)) {\n      toast.error('Apenas ficheiros CSV são suportados. Exporte o Excel como CSV primeiro.');\n      return;\n    }\n    \n    if (selectedFile.size > 50 * 1024 * 1024) {\n      toast.error('Ficheiro muito grande. Máximo 50MB.');\n      return;\n    }\n    \n    setFile(selectedFile);\n    setResult(null);\n    toast.success(`Ficheiro ${selectedFile.name} carregado`);\n  };\n\n  const handleDrop = (e: React.DragEvent) => {\n    e.preventDefault();\n    setDragOver(false);\n    \n    const droppedFile = e.dataTransfer.files[0];\n    if (droppedFile) {\n      handleFileSelect(droppedFile);\n    }\n  };\n\n  const handleUpload = async () => {\n    if (!file) return;\n    \n    setUploading(true);\n    setResult(null);\n    \n    try {\n      const formData = new FormData();\n      formData.append('file', file);\n      \n      const response = await fetch(`/api/upload/${selectedType}`, {\n        method: 'POST',\n        body: formData\n      });\n      \n      const result: UploadResult = await response.json();\n      \n      setResult(result);\n      \n      if (result.success) {\n        toast.success(result.message);\n      } else {\n        toast.error(result.error || 'Erro no processamento');\n      }\n      \n    } catch (error: any) {\n      console.error('Erro no upload:', error);\n      toast.error('Erro na comunicação com o servidor');\n      setResult({\n        success: false,\n        message: 'Erro na comunicação',\n        error: error.message\n      });\n    } finally {\n      setUploading(false);\n    }\n  };\n\n  const resetUpload = () => {\n    setFile(null);\n    setResult(null);\n  };\n\n  return (\n    <div className=\"container mx-auto p-6 max-w-4xl\">\n      {/* Header */}\n      <div className=\"mb-6\">\n        <div className=\"flex justify-between items-center mb-4\">\n          <div>\n            <h1 className=\"text-3xl font-bold\">Upload de Ficheiros</h1>\n            <p className=\"text-muted-foreground\">Sistema de upload CSV para dados operacionais</p>\n          </div>\n          <Link href=\"/\">\n            <Button variant=\"outline\">\n              <ArrowLeft className=\"mr-2 h-4 w-4\" />\n              Voltar\n            </Button>\n          </Link>\n        </div>\n        \n        {/* Aviso de Segurança */}\n        <div className=\"bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4\">\n          <div className=\"flex items-center\">\n            <AlertTriangle className=\"text-amber-600 mr-2\" size={20} />\n            <div>\n              <p className=\"text-sm font-medium text-amber-800\">\n                🔒 Por motivos de segurança, apenas ficheiros CSV são aceites.\n              </p>\n              <p className=\"text-xs text-amber-700 mt-1\">\n                Para usar Excel: Ficheiro → Guardar Como → CSV (UTF-8)\n              </p>\n            </div>\n          </div>\n        </div>\n      </div>\n\n      {/* Tipo de Upload */}\n      <Card className=\"mb-6\">\n        <CardHeader>\n          <CardTitle>1. Selecionar Tipo de Upload</CardTitle>\n          <CardDescription>Escolha o tipo de ficheiro que pretende carregar</CardDescription>\n        </CardHeader>\n        <CardContent>\n          <div className=\"grid grid-cols-1 md:grid-cols-3 gap-4\">\n            {uploadTypes.map(type => (\n              <div\n                key={type.id}\n                className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${\n                  selectedType === type.id \n                    ? type.color\n                    : 'border-gray-200 hover:border-gray-300'\n                }`}\n                onClick={() => setSelectedType(type.id)}\n              >\n                <h3 className=\"font-semibold mb-2\">{type.title}</h3>\n                <p className=\"text-sm text-muted-foreground\">{type.description}</p>\n              </div>\n            ))}\n          </div>\n        </CardContent>\n      </Card>\n\n      {/* Upload Area */}\n      <Card className=\"mb-6\">\n        <CardHeader>\n          <CardTitle>2. Carregar Ficheiro CSV</CardTitle>\n          <CardDescription>\n            Apenas ficheiros CSV | Tamanho máximo: 50MB\n          </CardDescription>\n        </CardHeader>\n        <CardContent>\n          {!file ? (\n            <div\n              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${\n                dragOver ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-gray-400'\n              }`}\n              onDrop={handleDrop}\n              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}\n              onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}\n              onClick={() => document.getElementById('file-input')?.click()}\n            >\n              <Upload className=\"mx-auto text-gray-400 mb-4\" size={48} />\n              <div>\n                <p className=\"text-lg font-medium text-gray-900 mb-2\">\n                  Arraste o ficheiro CSV aqui ou clique para selecionar\n                </p>\n                <p className=\"text-sm text-gray-500\">\n                  Upload para: {uploadTypes.find(t => t.id === selectedType)?.title}\n                </p>\n              </div>\n              <input\n                id=\"file-input\"\n                type=\"file\"\n                className=\"hidden\"\n                accept=\".csv\"\n                onChange={(e) => e.target.files && handleFileSelect(e.target.files[0])}\n              />\n            </div>\n          ) : (\n            <div className=\"border border-gray-200 rounded-lg p-4\">\n              <div className=\"flex items-center justify-between\">\n                <div className=\"flex items-center\">\n                  <FileText className=\"text-blue-600 mr-3\" size={24} />\n                  <div>\n                    <p className=\"font-medium text-gray-900\">{file.name}</p>\n                    <p className=\"text-sm text-gray-500\">\n                      {(file.size / 1024 / 1024).toFixed(2)} MB | Tipo: {selectedType}\n                    </p>\n                  </div>\n                </div>\n                <Button\n                  variant=\"outline\"\n                  size=\"sm\"\n                  onClick={resetUpload}\n                >\n                  <XCircle className=\"mr-2 h-4 w-4\" />\n                  Remover\n                </Button>\n              </div>\n            </div>\n          )}\n        </CardContent>\n      </Card>\n\n      {/* Upload Button */}\n      {file && (\n        <Card className=\"mb-6\">\n          <CardHeader>\n            <CardTitle>3. Processar Ficheiro</CardTitle>\n            <CardDescription>\n              O ficheiro será analisado e os dados inseridos/atualizados na base de dados\n            </CardDescription>\n          </CardHeader>\n          <CardContent>\n            <Button \n              onClick={handleUpload} \n              disabled={uploading}\n              className=\"w-full\"\n              size=\"lg\"\n            >\n              {uploading ? (\n                <>\n                  <div className=\"animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2\"></div>\n                  A processar...\n                </>\n              ) : (\n                <>🚀 Processar Ficheiro</>\n              )}\n            </Button>\n          </CardContent>\n        </Card>\n      )}\n\n      {/* Results */}\n      {result && (\n        <Card>\n          <CardHeader>\n            <CardTitle className=\"flex items-center\">\n              {result.success ? (\n                <CheckCircle className=\"text-green-600 mr-2\" size={24} />\n              ) : (\n                <XCircle className=\"text-red-600 mr-2\" size={24} />\n              )}\n              Resultado do Processamento\n            </CardTitle>\n          </CardHeader>\n          <CardContent>\n            <div className={`p-4 rounded-lg mb-4 ${\n              result.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'\n            }`}>\n              <p className=\"font-medium mb-2\">{result.message}</p>\n              \n              {result.success && result.data && (\n                <div className=\"grid grid-cols-2 md:grid-cols-4 gap-4 text-center\">\n                  <div>\n                    <p className=\"text-2xl font-bold text-blue-600\">{result.data.parsed}</p>\n                    <p className=\"text-sm text-gray-600\">Analisados</p>\n                  </div>\n                  {result.data.inserted !== undefined && (\n                    <div>\n                      <p className=\"text-2xl font-bold text-green-600\">{result.data.inserted}</p>\n                      <p className=\"text-sm text-gray-600\">Inseridos</p>\n                    </div>\n                  )}\n                  {result.data.updated !== undefined && (\n                    <div>\n                      <p className=\"text-2xl font-bold text-blue-600\">{result.data.updated}</p>\n                      <p className=\"text-sm text-gray-600\">Atualizados</p>\n                    </div>\n                  )}\n                  <div>\n                    <p className=\"text-2xl font-bold text-red-600\">{result.data.errors.length}</p>\n                    <p className=\"text-sm text-gray-600\">Erros</p>\n                  </div>\n                </div>\n              )}\n              \n              {result.data?.errors && result.data.errors.length > 0 && (\n                <div className=\"mt-4\">\n                  <p className=\"font-medium text-red-700 mb-2\">Erros encontrados:</p>\n                  <ul className=\"text-sm text-red-600 list-disc list-inside max-h-32 overflow-y-auto\">\n                    {result.data.errors.slice(0, 10).map((error, index) => (\n                      <li key={index}>{error}</li>\n                    ))}\n                    {result.data.errors.length > 10 && (\n                      <li className=\"font-medium\">... e mais {result.data.errors.length - 10} erros</li>\n                    )}\n                  </ul>\n                </div>\n              )}\n              \n              {!result.success && result.error && (\n                <div className=\"mt-2\">\n                  <p className=\"text-sm text-red-600\">{result.error}</p>\n                  {result.details && (\n                    <p className=\"text-xs text-red-500 mt-1\">{result.details}</p>\n                  )}\n                </div>\n              )}\n            </div>\n            \n            <div className=\"flex gap-2\">\n              <Button onClick={resetUpload} variant=\"outline\">\n                Carregar Outro Ficheiro\n              </Button>\n              <Link href=\"/reservas\">\n                <Button>\n                  Ver Reservas\n                </Button>\n              </Link>\n            </div>\n          </CardContent>\n        </Card>\n      )}\n    </div>\n  );\n}"
+"use client";
+
+import { useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
+import { Upload, FileSpreadsheet, CheckCircle, AlertCircle } from 'lucide-react';
+
+interface UploadResult {
+  inserted: number;
+  updated: number;
+  errors: string[];
+}
+
+export default function UploadPage() {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadType, setUploadType] = useState<string>('');
+  const [parqueId, setParqueId] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
+
+  const uploadTypes = [
+    { value: 'reservas', label: 'Reservas (Base Principal)', description: 'Excel com reservas para inserir/atualizar' },
+    { value: 'caixa', label: 'Dados de Caixa', description: 'Excel com transações de caixa' },
+    { value: 'entregas', label: 'Entregas', description: 'Excel com dados de entrega de veículos' },
+    { value: 'recolhas', label: 'Recolhas', description: 'Excel com dados de recolha de veículos' }
+  ];
+
+  const parques = [
+    { value: 'lisboa', label: 'Lisboa' },
+    { value: 'porto', label: 'Porto' },
+    { value: 'faro', label: 'Faro' }
+  ];
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // Verificar se é Excel
+      const validTypes = [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel',
+        'text/csv'
+      ];
+      
+      if (validTypes.includes(file.type)) {
+        setSelectedFile(file);
+        setUploadResult(null);
+      } else {
+        toast.error('Por favor, seleciona um ficheiro Excel (.xlsx, .xls) ou CSV');
+      }
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile || !uploadType || !parqueId) {
+      toast.error('Por favor, preenche todos os campos');
+      return;
+    }
+
+    setIsUploading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('type', uploadType);
+      formData.append('parqueId', parqueId);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setUploadResult(result);
+        toast.success(
+          `Upload concluído! ${result.inserted} inseridos, ${result.updated} atualizados`
+        );
+      } else {
+        throw new Error(result.error || 'Erro no upload');
+      }
+    } catch (error: any) {
+      console.error('Erro no upload:', error);
+      toast.error(`Erro no upload: ${error.message}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  return (
+    <div className="container mx-auto p-6 max-w-4xl">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-blue-900">Upload de Ficheiros</h1>
+        <p className="text-gray-600 mt-2">
+          Sistema de importação de dados Excel para as bases Multipark
+        </p>
+      </div>
+
+      <div className="grid gap-6">
+        {/* Formulário de Upload */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Importar Dados
+            </CardTitle>
+            <CardDescription>
+              Seleciona o tipo de dados e o ficheiro Excel para importar
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Tipo de Upload */}
+            <div className="space-y-2">
+              <Label htmlFor="uploadType">Tipo de Dados</Label>
+              <Select value={uploadType} onValueChange={setUploadType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleciona o tipo de dados..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {uploadTypes.map((type) => (
+                    <SelectItem key={type.value} value={type.value}>
+                      <div>
+                        <div className="font-medium">{type.label}</div>
+                        <div className="text-sm text-gray-500">{type.description}</div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Seleção de Parque */}
+            <div className="space-y-2">
+              <Label htmlFor="parque">Parque</Label>
+              <Select value={parqueId} onValueChange={setParqueId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleciona o parque..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {parques.map((parque) => (
+                    <SelectItem key={parque.value} value={parque.value}>
+                      {parque.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Seleção de Ficheiro */}
+            <div className="space-y-2">
+              <Label htmlFor="file">Ficheiro Excel</Label>
+              <Input
+                id="file"
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleFileChange}
+                className="cursor-pointer"
+              />
+              {selectedFile && (
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
+                </div>
+              )}
+            </div>
+
+            {/* Botão de Upload */}
+            <Button 
+              onClick={handleUpload}
+              disabled={!selectedFile || !uploadType || !parqueId || isUploading}
+              className="w-full"
+            >
+              {isUploading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  A processar...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Fazer Upload
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Resultados do Upload */}
+        {uploadResult && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                Resultados do Upload
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="text-center p-4 bg-green-50 rounded-lg">
+                  <div className="text-2xl font-bold text-green-600">
+                    {uploadResult.inserted}
+                  </div>
+                  <div className="text-sm text-green-700">Novos Registos</div>
+                </div>
+                <div className="text-center p-4 bg-blue-50 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {uploadResult.updated}
+                  </div>
+                  <div className="text-sm text-blue-700">Atualizações</div>
+                </div>
+              </div>
+
+              {uploadResult.errors.length > 0 && (
+                <div className="mt-4">
+                  <div className="flex items-center gap-2 text-red-600 mb-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <span className="font-medium">Erros encontrados:</span>
+                  </div>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                    <ul className="text-sm text-red-700 space-y-1">
+                      {uploadResult.errors.map((error, index) => (
+                        <li key={index}>• {error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Instruções */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Instruções de Uso</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <h4 className="font-semibold mb-2">📁 Formato dos Ficheiros:</h4>
+              <ul className="text-sm space-y-1 ml-4">
+                <li>• <strong>Reservas:</strong> License Plate, Allocation, Customer Name, Check-in, Check-out, Price, Estado</li>
+                <li>• <strong>Caixa:</strong> Matrícula, Valor, Método, Data, Observações</li>
+                <li>• <strong>Entregas:</strong> License Plate, Allocation, Data Entrega, Condutor, Observações</li>
+                <li>• <strong>Recolhas:</strong> License Plate, Allocation, Data Recolha, Condutor, Observações</li>
+              </ul>
+            </div>
+            
+            <div>
+              <h4 className="font-semibold mb-2">🔄 Lógica de Atualização:</h4>
+              <ul className="text-sm space-y-1 ml-4">
+                <li>• <strong>Reservas:</strong> UPSERT por License Plate + Allocation</li>
+                <li>• <strong>Outros:</strong> Atualizam dados existentes nas reservas</li>
+                <li>• Colunas vazias não sobrepõem dados existentes</li>
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
