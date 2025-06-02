@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { getCurrentUser, signIn as supabaseSignIn, signOut as supabaseSignOut } from '@/lib/supabase/clients';
+import { supabaseDashboard } from '@/lib/supabase/clients';
 
 interface User {
   id: string;
@@ -24,11 +24,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     checkAuthStatus();
+    
+    // Listener para mudanças de auth
+    const { data: { subscription } } = supabaseDashboard.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          const newUser: User = {
+            id: session.user.id,
+            email: session.user.email || '',
+            full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0]
+          };
+          setUser(newUser);
+          localStorage.setItem('userProfile', JSON.stringify(newUser));
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          localStorage.removeItem('userProfile');
+          localStorage.removeItem('multiparkSelectedPark');
+        }
+        setIsLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const checkAuthStatus = async () => {
     try {
-      const currentUser = await getCurrentUser();
+      const { data: { user: currentUser } } = await supabaseDashboard.auth.getUser();
       if (currentUser) {
         setUser({
           id: currentUser.id,
@@ -45,7 +67,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signIn = async (email: string, password: string): Promise<boolean> => {
     try {
-      const { data, error } = await supabaseSignIn(email, password);
+      const { data, error } = await supabaseDashboard.auth.signInWithPassword({
+        email,
+        password,
+      });
       
       if (error || !data.user) {
         console.error('Sign in error:', error);
@@ -69,7 +94,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     try {
-      await supabaseSignOut();
+      await supabaseDashboard.auth.signOut();
       setUser(null);
       localStorage.removeItem('userProfile');
       localStorage.removeItem('multiparkSelectedPark');
